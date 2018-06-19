@@ -67,7 +67,7 @@ std::unique_ptr<GraphOptimizer> MetaOptimizer::NewOptimizer(
     graph_optimizer.reset(new LayoutOptimizer());
   }
   if (optimizer == "memory") {
-    graph_optimizer.reset(new MemoryOptimizer(RewriterConfig::MANUAL));
+    graph_optimizer.reset(new MemoryOptimizer(RewriterConfig::MANUAL, gpu_options_.per_process_gpu_memory_fraction()));
   }
   if (optimizer == "arithmetic") {
     graph_optimizer.reset(
@@ -119,14 +119,16 @@ Status MetaOptimizer::Optimize(Cluster* cluster, const GrapplerItem& item,
           std::unique_ptr<GraphOptimizer>(new LayoutOptimizer()));
     }
     if (cfg_.memory_optimization() != RewriterConfig::NO_MEM_OPT) {
+      double mem_fraction = gpu_options_.per_process_gpu_memory_fraction();
       if (cfg_.memory_optimizer_target_node_name_scope().empty()) {
         optimizers.push_back(std::unique_ptr<GraphOptimizer>(
             // Use the default target node name prefix "gradients/"
-            new MemoryOptimizer(cfg_.memory_optimization())));
+            new MemoryOptimizer(cfg_.memory_optimization(), mem_fraction)));
       } else {
         optimizers.push_back(
             std::unique_ptr<GraphOptimizer>(new MemoryOptimizer(
                 cfg_.memory_optimization(),
+                mem_fraction,
                 cfg_.memory_optimizer_target_node_name_scope())));
       }
     }
@@ -243,8 +245,9 @@ bool MetaOptimizerEnabled(const RewriterConfig& cfg) {
 
 Status RunMetaOptimizer(const GrapplerItem& item, const RewriterConfig& cfg,
                         DeviceBase* cpu_device, Cluster* cluster,
-                        GraphDef* optimized_graph) {
-  MetaOptimizer optimizer(cpu_device, cfg);
+                        GraphDef* optimized_graph,
+                        const GPUOptions& gpu_options) {
+  MetaOptimizer optimizer(cpu_device, cfg, gpu_options);
   return optimizer.Optimize(cluster, item, optimized_graph);
 }
 
